@@ -1,1 +1,117 @@
-secrets.txt
+# =============================================================================
+# Secrets — NEVER commit these
+# =============================================================================
+# Backend
+.env
+.env.*
+!.env.example
+
+# Android
+local.properties
+*.keystore
+*.jks
+keystore.properties
+
+# iOS
+ios/WorkTickConfig.swift
+ios/**/WorkTickConfig.swift
+ios/Secrets.xcconfig
+ios/**/Secrets.xcconfig
+
+# Generic
+secrets.json
+*.secret
+*.pem
+*.key
+
+# =============================================================================
+# Python / Backend
+# =============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+worktick.db
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# =============================================================================
+# Android / Gradle / Kotlin
+# =============================================================================
+*.iml
+.gradle/
+/local.properties
+.idea/
+.DS_Store
+build/
+android/app/build/
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+android/.kotlin/
+android/app/release/
+
+# =============================================================================
+# iOS / Xcode
+# =============================================================================
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+DerivedData/
+*.xcuserstate
+*.xcuserdatad/
+ios/build/
+ios/Pods/
+ios/.swiftpm/
+
+# =============================================================================
+# IDE / Editor
+# =============================================================================
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+*.swp
+*.swo
+*~
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# =============================================================================
+# OS
+# =============================================================================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# =============================================================================
+# Logs and temp
+# =============================================================================
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.cache/
+tmp/
+temp/
+
+# =============================================================================
+# Fly.io
+# =============================================================================
+fly.toml.bak
+.fly/

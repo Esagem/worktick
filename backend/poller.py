@@ -26,18 +26,19 @@ def _matches_work_title(event: dict) -> bool:
 
 def poll_once() -> dict:
     poll_started = int(time.time())
-    err: str | None = None
+    error_msg: str | None = None
+
+    now = datetime.now(timezone.utc)
+    time_min = now - timedelta(days=config.LOOKBACK_DAYS)
+    time_max = now + timedelta(days=config.LOOKAHEAD_DAYS)
+
+    window_start = int(time_min.timestamp())
+    window_end = int(time_max.timestamp())
+
     matched_blocks: list[dict] = []
     deleted = 0
 
     try:
-        now = datetime.now(timezone.utc)
-        time_min = now - timedelta(days=config.LOOKBACK_DAYS)
-        time_max = now + timedelta(days=config.LOOKAHEAD_DAYS)
-
-        window_start = int(time_min.timestamp())
-        window_end = int(time_max.timestamp())
-
         calendars = google_client.list_calendars()
         log.info("Polling %d calendars", len(calendars))
 
@@ -72,17 +73,19 @@ def poll_once() -> dict:
 
         if matched_blocks:
             db.upsert_blocks(matched_blocks)
+
         deleted = db.delete_stale_blocks(window_start, window_end, poll_started)
     except Exception as e:
-        err = str(e)
+        error_msg = str(e)
         log.exception("Poll failed")
 
-    db.log_poll(len(matched_blocks), deleted, err)
+    db.log_poll(len(matched_blocks), deleted, error_msg)
+
     stats = {
         "matched": len(matched_blocks),
         "deleted_stale": deleted,
         "polled_at": poll_started,
-        "error": err,
+        "error": error_msg,
     }
     log.info("Poll complete: %s", stats)
     return stats

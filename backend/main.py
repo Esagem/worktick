@@ -55,11 +55,10 @@ def _check_secret(authorization: str | None) -> None:
 
 @app.get("/")
 def root():
-    tokens = db.get_tokens()
     last = db.latest_poll()
     return {
         "ok": True,
-        "authenticated": tokens is not None,
+        "authenticated": db.get_tokens() is not None,
         "work_event_title": config.WORK_EVENT_TITLE,
         "poll_interval_seconds": config.POLL_INTERVAL_SECONDS,
         "last_poll": dict(last) if last else None,

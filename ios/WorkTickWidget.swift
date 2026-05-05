@@ -19,10 +19,14 @@ import WidgetKit
 import SwiftUI
 
 // MARK: - Configuration
+//
+// Backend URL and API secret live in WorkTickConfig.swift, which is gitignored.
+// Copy WorkTickConfig.example.swift → WorkTickConfig.swift and fill in real values.
+// Make sure WorkTickConfig.swift is added to BOTH the app target and widget target.
 
 enum WT {
-    static let backendURL = URL(string: "https://YOUR-APP.fly.dev")!
-    static let apiSecret = "PASTE_API_SHARED_SECRET_HERE"
+    static let backendURL = WorkTickConfig.backendURL
+    static let apiSecret = WorkTickConfig.apiSecret
 }
 
 // MARK: - API model

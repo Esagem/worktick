@@ -1,0 +1,14 @@
+{
+    "recommendations": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "fwcd.kotlin",
+        "vscjava.vscode-gradle",
+        "redhat.vscode-xml",
+        "samuelcolvin.jinjahtml",
+        "tamasfe.even-better-toml",
+        "ms-azuretools.vscode-docker",
+        "github.vscode-github-actions",
+        "secrets.xrtek-secret-detector"
+    ]
+}

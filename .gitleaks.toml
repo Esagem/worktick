@@ -1,0 +1,51 @@
+# gitleaks configuration — scans commits for accidentally-committed secrets.
+# Run manually: `gitleaks detect --source . --verbose`
+# Or via pre-commit hook (see docs/SECURITY.md)
+
+title = "WorkTick gitleaks config"
+
+[extend]
+useDefault = true
+
+# =============================================================================
+# Custom rules — secrets specific to this project
+# =============================================================================
+
+[[rules]]
+id = "google-oauth-client-secret"
+description = "Google OAuth Client Secret (GOCSPX-...)"
+regex = '''GOCSPX-[A-Za-z0-9_-]{20,}'''
+tags = ["google", "oauth", "secret"]
+
+[[rules]]
+id = "google-oauth-client-id"
+description = "Google OAuth Client ID"
+regex = '''[0-9]{10,12}-[a-z0-9]{20,40}\.apps\.googleusercontent\.com'''
+tags = ["google", "oauth"]
+
+[[rules]]
+id = "worktick-api-shared-secret-pattern"
+description = "Looks like an API_SHARED_SECRET (Python secrets.token_urlsafe(32))"
+# Matches the format that secrets.token_urlsafe(32) produces — base64url, ~43 chars
+regex = '''API_SHARED_SECRET\s*[:=]\s*["']?[A-Za-z0-9_-]{40,50}["']?'''
+tags = ["api", "secret"]
+
+[[rules]]
+id = "fly-api-token"
+description = "Fly.io API token"
+regex = '''fo1_[A-Za-z0-9_-]{40,}'''
+tags = ["fly", "token"]
+
+# =============================================================================
+# Allow list — known false positives
+# =============================================================================
+
+[allowlist]
+description = "Allow example/template files and docs"
+paths = [
+    '''\.env\.example$''',
+    '''WorkTickConfig\.example\.swift$''',
+    '''local\.properties\.example$''',
+    '''docs/.*\.md$''',
+    '''README\.md$''',
+]

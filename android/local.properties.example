@@ -1,0 +1,8 @@
+# local.properties — per-developer config. NEVER commit the real file.
+# Copy to local.properties and fill in real values.
+
+sdk.dir=/path/to/your/Android/Sdk
+
+# WorkTick backend
+BACKEND_URL=https://your-fly-app.fly.dev
+API_SECRET=paste-your-API_SHARED_SECRET-here

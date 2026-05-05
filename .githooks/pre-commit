@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# .githooks/pre-commit
+# Manual install: `git config core.hooksPath .githooks`
+#
+# Blocks commits that contain things that look like secrets.
+# This is a best-effort regex check — not a substitute for gitleaks, but
+# it runs in <1s on every commit and catches the obvious mistakes.
+
+set -e
+
+red() { printf "\033[31m%s\033[0m\n" "$1"; }
+green() { printf "\033[32m%s\033[0m\n" "$1"; }
+yellow() { printf "\033[33m%s\033[0m\n" "$1"; }
+
+# Files staged for commit (Added or Modified, not Deleted)
+staged_files=$(git diff --cached --name-only --diff-filter=AM)
+
+if [ -z "$staged_files" ]; then
+    exit 0
+fi
+
+# Patterns that should never appear in a commit
+patterns=(
+    'GOCSPX-[A-Za-z0-9_-]{20,}'                          # Google OAuth client secret
+    '[0-9]{10,12}-[a-z0-9]{20,40}\.apps\.googleusercontent\.com'  # Google OAuth client ID
+    'fo1_[A-Za-z0-9_-]{40,}'                              # Fly.io API token
+    'AKIA[0-9A-Z]{16}'                                     # AWS access key
+    'sk-[a-zA-Z0-9]{20,}'                                  # Generic API key (Stripe/OpenAI/etc)
+    'ghp_[a-zA-Z0-9]{36}'                                  # GitHub PAT
+    'API_SHARED_SECRET\s*=\s*"[A-Za-z0-9_-]{30,}"'        # Hardcoded API secret
+)
+
+found_issues=0
+
+for file in $staged_files; do
+    # Skip example/template files
+    case "$file" in
+        *.example|*.example.*|docs/*|.gitleaks.toml|.githooks/*)
+            continue
+            ;;
+    esac
+
+    # Skip binary files
+    if file --mime "$file" 2>/dev/null | grep -q "binary"; then
+        continue
+    fi
+
+    for pattern in "${patterns[@]}"; do
+        if grep -nE "$pattern" "$file" >/dev/null 2>&1; then
+            red "✗ Possible secret detected in $file:"
+            grep -nE "$pattern" "$file" | sed 's/^/    /'
+            found_issues=$((found_issues + 1))
+        fi
+    done
+done
+
+if [ $found_issues -gt 0 ]; then
+    red ""
+    red "Commit blocked: $found_issues possible secret(s) found in staged changes."
+    yellow ""
+    yellow "If this is a false positive, you can:"
+    yellow "  1. Add the file to .gitleaks.toml allowlist, or"
+    yellow "  2. Bypass with: git commit --no-verify"
+    yellow ""
+    yellow "If it's a real secret:"
+    yellow "  1. Remove it from the file"
+    yellow "  2. If you've already pushed, ROTATE the secret immediately"
+    yellow "  3. See docs/SECURITY.md for the rotation playbook"
+    exit 1
+fi
+
+green "✓ Pre-commit secret scan passed"
+exit 0

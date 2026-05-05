@@ -1,4 +1,4 @@
-"""SQLite persistence."""
+"""SQLite persistence. Three tables: oauth_tokens, work_blocks, poll_log."""
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
@@ -56,6 +56,8 @@ def connect():
         conn.close()
 
 
+# --- OAuth token storage ---
+
 def save_tokens(refresh_token: str, access_token: Optional[str], expires_at: Optional[int]) -> None:
     import time
     with connect() as conn:
@@ -86,6 +88,8 @@ def update_access_token(access_token: str, expires_at: int) -> None:
         )
 
 
+# --- Work blocks ---
+
 def upsert_blocks(blocks: list[dict]) -> None:
     import time
     now = int(time.time())
@@ -112,11 +116,24 @@ def delete_stale_blocks(window_start: int, window_end: int, last_seen_before: in
         return cur.rowcount
 
 
+def get_blocks_in_range(start: int, end: int) -> list[sqlite3.Row]:
+    with connect() as conn:
+        cur = conn.execute(
+            """SELECT * FROM work_blocks
+               WHERE instance_end > ? AND instance_start < ?
+               ORDER BY instance_start""",
+            (start, end),
+        )
+        return list(cur.fetchall())
+
+
 def get_all_blocks() -> list[sqlite3.Row]:
     with connect() as conn:
         cur = conn.execute("SELECT * FROM work_blocks ORDER BY instance_start")
         return list(cur.fetchall())
 
+
+# --- Poll log ---
 
 def log_poll(matched: int, deleted: int, error: Optional[str] = None) -> None:
     import time
@@ -129,5 +146,5 @@ def log_poll(matched: int, deleted: int, error: Optional[str] = None) -> None:
 
 def latest_poll() -> Optional[sqlite3.Row]:
     with connect() as conn:
-        cur = conn.execute("SELECT * FROM poll_log ORDER BY polled_at DESC LIMIT 1")
+        cur = conn.execute("SELECT * FROM poll_log ORDER BY id DESC LIMIT 1")
         return cur.fetchone()

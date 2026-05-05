@@ -1,0 +1,15 @@
+{
+    "python.defaultInterpreterPath": "${workspaceFolder}/backend/.venv/bin/python",
+    "python.analysis.extraPaths": ["${workspaceFolder}/backend"],
+    "files.exclude": {
+        "**/__pycache__": true,
+        "**/.gradle": true,
+        "**/.idea": true,
+        "**/build": true
+    },
+    "files.watcherExclude": {
+        "**/.gradle/**": true,
+        "**/build/**": true,
+        "**/.venv/**": true
+    }
+}

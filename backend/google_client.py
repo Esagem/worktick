@@ -1,4 +1,4 @@
-"""Google OAuth and Calendar API."""
+"""Google OAuth and Calendar API client."""
 import time
 import urllib.parse
 from typing import Optional

@@ -11,15 +11,13 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
-/** Backend connection config — set these or wire to BuildConfig. */
-object WTConfig {
-    const val BACKEND_URL = "https://YOUR-APP.fly.dev"
-    const val API_SECRET = "PASTE_API_SHARED_SECRET_HERE"
-}
-
 /**
  * Periodic worker that fetches /schedule and persists it.
- * Default schedule is every 6 hours (set in WorkTickApp).
+ * Backend URL and API secret are injected at compile time from local.properties
+ * via BuildConfig — see app/build.gradle.kts.
+ *
+ * After fetching, also reconciles WidgetTickerService — starts it if a block
+ * is currently active, stops it otherwise.
  */
 class ScheduleFetchWorker(
     appContext: Context,
@@ -31,8 +29,8 @@ class ScheduleFetchWorker(
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {
             val req = Request.Builder()
-                .url("${WTConfig.BACKEND_URL}/schedule")
-                .header("Authorization", "Bearer ${WTConfig.API_SECRET}")
+                .url("${BuildConfig.BACKEND_URL}/schedule")
+                .header("Authorization", "Bearer ${BuildConfig.API_SECRET}")
                 .build()
             client.newCall(req).execute().use { resp ->
                 if (!resp.isSuccessful) return@withContext Result.retry()
@@ -51,11 +49,22 @@ class ScheduleFetchWorker(
                 )
                 ScheduleStore.write(applicationContext, schedule)
                 MoneyTickerWidgetProvider.requestUpdate(applicationContext)
-                MoneyTickerWidgetProvider.maybeStartTicking(applicationContext, schedule)
+                MoneyTickerWidgetProvider.schedulePartialTick(applicationContext, schedule)
+                reconcileTickerService(schedule)
             }
             Result.success()
         } catch (e: Exception) {
             Result.retry()
+        }
+    }
+
+    private fun reconcileTickerService(schedule: Schedule) {
+        val now = System.currentTimeMillis() / 1000
+        val active = schedule.blocks.any { it.start <= now && now < it.end }
+        if (active) {
+            WidgetTickerService.start(applicationContext)
+        } else {
+            WidgetTickerService.stop(applicationContext)
         }
     }
 }

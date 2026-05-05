@@ -1,31 +1,38 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Place at: app/src/main/res/layout/worktick_money.xml -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/wt_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
+    android:gravity="center"
     android:padding="14dp"
-    android:background="@android:color/transparent">
+    android:background="@drawable/wt_widget_bg">
 
     <TextView
         android:id="@+id/wt_status"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:textSize="11sp"
-        android:textColor="?android:attr/textColorSecondary"
-        android:text="○ Off · All-time" />
+        android:background="@drawable/wt_pill_bg"
+        android:paddingHorizontal="10dp"
+        android:paddingVertical="3dp"
+        android:textSize="9sp"
+        android:textColor="#FFFFFF"
+        android:fontFamily="sans-serif-medium"
+        android:letterSpacing="0.12"
+        android:textAllCaps="true"
+        android:text="OFF" />
 
     <TextView
         android:id="@+id/wt_money"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="2dp"
-        android:textSize="32sp"
+        android:layout_marginTop="8dp"
+        android:textSize="38sp"
         android:textStyle="bold"
-        android:fontFamily="sans-serif-medium"
-        android:textColor="?android:attr/textColorPrimary"
+        android:fontFamily="sans-serif"
+        android:textColor="#FFFFFF"
         android:fontFeatureSettings="tnum"
+        android:includeFontPadding="false"
         android:text="$0.00" />
 
     <TextView
@@ -34,5 +41,8 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
         android:textSize="10sp"
-        android:textColor="?android:attr/textColorSecondary" />
+        android:fontFamily="sans-serif"
+        android:textColor="#B0B0B0"
+        android:fontFeatureSettings="tnum"
+        android:letterSpacing="0.04" />
 </LinearLayout>
