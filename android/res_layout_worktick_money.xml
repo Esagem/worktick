@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Place at: app/src/main/res/layout/worktick_money.xml -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/wt_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="14dp"
+    android:background="@android:color/transparent">
+
+    <TextView
+        android:id="@+id/wt_status"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textSize="11sp"
+        android:textColor="?android:attr/textColorSecondary"
+        android:text="○ Off · All-time" />
+
+    <TextView
+        android:id="@+id/wt_money"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:textSize="32sp"
+        android:textStyle="bold"
+        android:fontFamily="sans-serif-medium"
+        android:textColor="?android:attr/textColorPrimary"
+        android:fontFeatureSettings="tnum"
+        android:text="$0.00" />
+
+    <TextView
+        android:id="@+id/wt_subline"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:textSize="10sp"
+        android:textColor="?android:attr/textColorSecondary" />
+</LinearLayout>
