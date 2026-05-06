@@ -19,6 +19,11 @@
     <!-- Survive reboots -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
+    <!-- Lets the app self-prompt to be added to the battery-optimization
+         allowlist (the Samsung "Unrestricted" preset). Without it the
+         foreground ticker gets throttled after a minute or two of screen-off. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
     <application
         android:name=".WorkTickApp"
         android:allowBackup="true"

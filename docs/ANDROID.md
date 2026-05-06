@@ -34,14 +34,31 @@ These values get baked into `BuildConfig.BACKEND_URL` and `BuildConfig.API_SECRE
 - Click the green ▶ play button
 - App installs and launches with a "WorkTick" splash screen
 
-## 4. Add the widget to your home screen
+## 4. First launch — grant background permissions
+
+Open the WorkTick app once after installing. It will:
+
+1. Ask for **notification permission** (Android 13+). Tap **Allow** — the notification stays silent and hidden in the shade, but it's required to legalize the foreground ticker service.
+2. Ask to **ignore battery optimizations**. Tap **Allow** — on Samsung this is the same as setting Battery → **Unrestricted**.
+
+The home screen of the app shows two status lines (`✓ Background activity allowed`, `✓ Notifications allowed`) so you can confirm both were granted. If you accidentally denied either, tap **Allow background activity** to re-fire the system dialog.
+
+There's one Samsung-specific toggle that has no public API and can't be granted programmatically — see step 6 below.
+
+## 5. Add the widget to your home screen
 
 - Long-press an empty area of your home screen
 - Tap **Widgets**
 - Find **WorkTick** in the list
 - Drag onto a home screen panel
 
-The widget will show "Loading..." briefly, then your real numbers once the WorkManager fetches the schedule (within ~15 minutes, or immediately if you tap the widget).
+The widget will show its `SYNC` (amber) state briefly, then your real numbers once the WorkManager fetches the schedule (within ~15 minutes, or immediately if you tap the widget).
+
+## 6. Samsung-only: "Never sleeping apps"
+
+For consistent sub-second cent ticking on One UI 6+, also add WorkTick to **Settings → Battery → Background usage limits → Never sleeping apps**. The app's home screen has an **Open app battery settings** button that deep-links you straight to the relevant page — toggle WorkTick on there.
+
+Without this, Doze can still throttle the boundary alarm by a few minutes when a block starts; ticking during an active block is unaffected because foreground services are exempt from Doze.
 
 ## How updates work
 
@@ -52,16 +69,6 @@ The widget will show "Loading..." briefly, then your real numbers once the WorkM
   - **Foreground service boost**: when an active block is detected, `WidgetTickerService` starts and pushes 1 Hz updates via `partiallyUpdateAppWidget`. This bypasses Samsung's throttle.
 - **Block boundaries**: `BlockBoundaryReceiver` fires at the next block start/end (set via `AlarmManager.setExactAndAllowWhileIdle`), starting/stopping the service.
 - **60 fps view**: tap the widget to open `SmoothActivity` for a Choreographer-driven full-screen ticker.
-
-## Samsung-specific tuning
-
-For best results on One UI 6+:
-
-1. Settings → Apps → WorkTick → Battery → **Unrestricted**
-2. Settings → Battery → Background usage limits → add WorkTick to **Never sleeping apps**
-3. (Optional) Settings → Apps → WorkTick → "Pause app activity if unused" → **Off**
-
-Without these, Samsung will throttle even the foreground service.
 
 ## Lock screen / AOD bonus
 
@@ -76,7 +83,8 @@ Install **Good Lock** from the Galaxy Store, then the **LockStar** module. After
 
 **Widget never updates faster than every 30 minutes**
 - Check the foreground service is actually running. Settings → Apps → WorkTick → Notifications → "Widget updater" channel should be enabled.
-- Check Battery settings as above.
+- Open the WorkTick app and verify both status lines show ✓. If either shows ⚠, tap the corresponding button to re-grant.
+- On Samsung, also confirm WorkTick is in **Never sleeping apps** (step 6 above).
 
 **Widget missing from picker after install**
 - Force-stop the app, reboot the phone, try again.

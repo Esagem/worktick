@@ -9,13 +9,15 @@ import org.json.JSONObject
 data class Schedule(
     val fetchedAt: Long,
     val hourlyRate: Double,
-    val blocks: List<Block>
+    val blocks: List<Block>,
+    val plannedShiftHours: Double = 8.0
 ) {
     data class Block(val start: Long, val end: Long)
 
     fun toJson(): String = JSONObject().apply {
         put("fetched_at", fetchedAt)
         put("hourly_rate", hourlyRate)
+        put("planned_shift_hours", plannedShiftHours)
         put("blocks", JSONArray().apply {
             blocks.forEach { put(JSONObject().apply { put("start", it.start); put("end", it.end) }) }
         })
@@ -32,7 +34,8 @@ data class Schedule(
             Schedule(
                 fetchedAt = j.getLong("fetched_at"),
                 hourlyRate = j.getDouble("hourly_rate"),
-                blocks = blocks
+                blocks = blocks,
+                plannedShiftHours = j.optDouble("planned_shift_hours", 8.0)
             )
         } catch (e: Exception) { null }
     }

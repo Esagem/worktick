@@ -1,48 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!--
+  WorkTick Terminal widget — 4×1 layout
+  Rendered as a single ImageView bitmap (RemoteViews can't draw arbitrary
+  shapes, brackets, or capped rules natively). The provider draws everything
+  onto a Canvas in MoneyTickerWidgetProvider.renderTerminalBitmap(...).
+
+  Tap target: the root container opens SmoothActivity.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/wt_root"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:gravity="center"
-    android:padding="14dp"
-    android:background="@drawable/wt_widget_bg">
+    android:layout_height="match_parent">
 
-    <TextView
-        android:id="@+id/wt_status"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:background="@drawable/wt_pill_bg"
-        android:paddingHorizontal="10dp"
-        android:paddingVertical="3dp"
-        android:textSize="9sp"
-        android:textColor="#FFFFFF"
-        android:fontFamily="sans-serif-medium"
-        android:letterSpacing="0.12"
-        android:textAllCaps="true"
-        android:text="OFF" />
+    <ImageView
+        android:id="@+id/wt_canvas"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:adjustViewBounds="true"
+        android:scaleType="fitXY"
+        android:contentDescription="@string/app_name" />
 
-    <TextView
-        android:id="@+id/wt_money"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:textSize="38sp"
-        android:textStyle="bold"
-        android:fontFamily="sans-serif"
-        android:textColor="#FFFFFF"
-        android:fontFeatureSettings="tnum"
-        android:includeFontPadding="false"
-        android:text="$0.00" />
-
-    <TextView
-        android:id="@+id/wt_subline"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
-        android:textSize="10sp"
-        android:fontFamily="sans-serif"
-        android:textColor="#B0B0B0"
-        android:fontFeatureSettings="tnum"
-        android:letterSpacing="0.04" />
-</LinearLayout>
+</FrameLayout>

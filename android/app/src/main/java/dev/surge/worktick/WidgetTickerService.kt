@@ -16,8 +16,6 @@ import android.os.IBinder
 import android.os.Looper
 import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
-import java.text.NumberFormat
-import java.util.Locale
 
 class WidgetTickerService : Service() {
 
@@ -56,8 +54,8 @@ class WidgetTickerService : Service() {
                 stopSelf()
                 return
             }
-            tickWidget(schedule)
-            handler.postDelayed(this, TICK_INTERVAL_MS)
+            tickWidget()
+            handler.postDelayed(this, MoneyTickerWidgetProvider.nextCentTickMs(schedule))
         }
     }
 
@@ -66,25 +64,12 @@ class WidgetTickerService : Service() {
         return schedule.blocks.any { it.start <= now && now < it.end }
     }
 
-    private fun tickWidget(schedule: Schedule) {
+    private fun tickWidget() {
         val mgr = AppWidgetManager.getInstance(this)
         val ids = mgr.getAppWidgetIds(ComponentName(this, MoneyTickerWidgetProvider::class.java))
         if (ids.isEmpty()) return
-        val now = System.currentTimeMillis() / 1000
-        val computed = Math.allTime(schedule.blocks, now)
-        val isActive = computed.activeStart != null
-        val views = RemoteViews(packageName, R.layout.worktick_money).apply {
-            if (isActive) {
-                setTextViewText(R.id.wt_status, "ON THE CLOCK")
-                setInt(R.id.wt_status, "setBackgroundResource", R.drawable.wt_pill_bg_active)
-            } else {
-                setTextViewText(R.id.wt_status, "OFF")
-                setInt(R.id.wt_status, "setBackgroundResource", R.drawable.wt_pill_bg)
-            }
-            setTextViewText(R.id.wt_money, formatMoney(computed.totalDollars(now, schedule.hourlyRate)))
-            val totalHours = computed.totalSeconds(now) / 3600.0
-            setTextViewText(R.id.wt_subline, "%.2fh · %s/hr".format(totalHours, formatMoney(schedule.hourlyRate)))
-        }
+        val views = RemoteViews(packageName, R.layout.worktick_money)
+        MoneyTickerWidgetProvider.applyWidgetData(this, views)
         for (id in ids) {
             mgr.partiallyUpdateAppWidget(id, views)
         }
@@ -131,17 +116,9 @@ class WidgetTickerService : Service() {
         }
     }
 
-    private fun formatMoney(amount: Double): String {
-        val fmt = NumberFormat.getCurrencyInstance(Locale.US)
-        fmt.maximumFractionDigits = 2
-        fmt.minimumFractionDigits = 2
-        return fmt.format(amount)
-    }
-
     companion object {
         private const val CHANNEL_ID = "worktick_widget_updater"
         private const val NOTIF_ID = 4243
-        private const val TICK_INTERVAL_MS = 1000L
 
         fun start(context: Context) {
             val intent = Intent(context, WidgetTickerService::class.java)

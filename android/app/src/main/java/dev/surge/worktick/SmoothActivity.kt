@@ -4,7 +4,9 @@ import android.app.Activity
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.LinearGradient
 import android.graphics.Paint
+import android.graphics.Shader
 import android.graphics.Typeface
 import android.os.Bundle
 import android.util.AttributeSet
@@ -15,6 +17,7 @@ import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.content.res.ResourcesCompat
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -43,12 +46,17 @@ class SmoothActivity : Activity() {
             )
         }
 
+        val tfBold = ResourcesCompat.getFont(this, R.font.jetbrains_mono_bold)
+            ?: Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+        val tfMedium = ResourcesCompat.getFont(this, R.font.jetbrains_mono_medium)
+            ?: Typeface.SANS_SERIF
+
         statusPill = TextView(this).apply {
             text = "OFF"
             textSize = 11f
             setTextColor(Color.WHITE)
-            typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
-            letterSpacing = 0.15f
+            typeface = tfBold
+            letterSpacing = 0.18f
             setPadding(dp(16), dp(6), dp(16), dp(6))
             background = makePillBg(Color.parseColor("#2A2A30"))
         }
@@ -66,6 +74,7 @@ class SmoothActivity : Activity() {
         }
 
         moneyView = MoneyView(this).apply {
+            typeface = tfBold
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
@@ -75,9 +84,9 @@ class SmoothActivity : Activity() {
         subline = TextView(this).apply {
             text = ""
             textSize = 13f
-            setTextColor(Color.parseColor("#8A8A8A"))
-            typeface = Typeface.SANS_SERIF
-            letterSpacing = 0.06f
+            setTextColor(Color.parseColor("#9A9AA5"))
+            typeface = tfMedium
+            letterSpacing = 0.08f
             gravity = Gravity.CENTER
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
@@ -163,42 +172,83 @@ class MoneyView @JvmOverloads constructor(
 ) : View(context, attrs, defStyleAttr) {
 
     var schedule: Schedule? = null
+    var typeface: Typeface? = null
+        set(value) {
+            field = value
+            if (value != null) {
+                paint.typeface = value
+                glowPaint.typeface = value
+            }
+        }
 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
         typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
         textAlign = Paint.Align.CENTER
         try {
-            fontFeatureSettings = "tnum"
+            fontFeatureSettings = "tnum, ss01"
         } catch (_: Throwable) { }
+        setShadowLayer(28f, 0f, 0f, Color.argb(120, 255, 255, 255))
+    }
+
+    private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.argb(60, 255, 255, 255)
+        typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+        textAlign = Paint.Align.CENTER
+        maskFilter = android.graphics.BlurMaskFilter(36f, android.graphics.BlurMaskFilter.Blur.NORMAL)
     }
 
     private val textBounds = android.graphics.Rect()
     private val moneyFmt = NumberFormat.getCurrencyInstance(Locale.US).apply {
         maximumFractionDigits = 2
         minimumFractionDigits = 2
+        roundingMode = java.math.RoundingMode.FLOOR
     }
+    private var lastShaderHeight = 0
+    private var lastShaderTextSize = 0f
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         val s = schedule ?: return
-        val nowSec = System.currentTimeMillis() / 1000
-        val computed = Math.allTime(s.blocks, nowSec)
-        val dollars = computed.totalDollars(nowSec, s.hourlyRate)
+        val nowMs = System.currentTimeMillis()
+        val computed = Math.allTime(s.blocks, nowMs / 1000)
+        val dollars = computed.totalDollarsMs(nowMs, s.hourlyRate)
         val text = moneyFmt.format(dollars)
 
         val targetWidth = width * 0.85f
-        var size = height * 0.4f
+        var size = height * 0.42f
         paint.textSize = size
         paint.getTextBounds(text, 0, text.length, textBounds)
         if (textBounds.width() > targetWidth) {
             size *= targetWidth / textBounds.width()
             paint.textSize = size
         }
+        glowPaint.textSize = size
 
         paint.getTextBounds(text, 0, text.length, textBounds)
         val cx = width / 2f
         val cy = height / 2f - textBounds.exactCenterY()
+
+        if (height != lastShaderHeight || size != lastShaderTextSize) {
+            val ascent = paint.fontMetrics.ascent
+            val descent = paint.fontMetrics.descent
+            val top = cy + ascent
+            val bottom = cy + descent
+            paint.shader = LinearGradient(
+                0f, top, 0f, bottom,
+                intArrayOf(
+                    Color.parseColor("#FFFFFF"),
+                    Color.parseColor("#E6E6F0"),
+                    Color.parseColor("#A8A8B8")
+                ),
+                floatArrayOf(0f, 0.55f, 1f),
+                Shader.TileMode.CLAMP
+            )
+            lastShaderHeight = height
+            lastShaderTextSize = size
+        }
+
+        canvas.drawText(text, cx, cy, glowPaint)
         canvas.drawText(text, cx, cy, paint)
     }
 }
