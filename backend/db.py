@@ -35,6 +35,12 @@ CREATE TABLE IF NOT EXISTS poll_log (
     deleted INTEGER NOT NULL,
     error TEXT
 );
+
+CREATE TABLE IF NOT EXISTS app_config (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+);
 """
 
 
@@ -131,6 +137,35 @@ def get_all_blocks() -> list[sqlite3.Row]:
     with connect() as conn:
         cur = conn.execute("SELECT * FROM work_blocks ORDER BY instance_start")
         return list(cur.fetchall())
+
+
+# --- App config (mutable runtime settings) ---
+
+def get_config(key: str) -> Optional[str]:
+    with connect() as conn:
+        cur = conn.execute("SELECT value FROM app_config WHERE key=?", (key,))
+        row = cur.fetchone()
+        return row["value"] if row else None
+
+
+def set_config(key: str, value: str) -> None:
+    import time
+    with connect() as conn:
+        conn.execute(
+            """INSERT INTO app_config(key, value, updated_at) VALUES(?,?,?)
+               ON CONFLICT(key) DO UPDATE SET
+                   value=excluded.value,
+                   updated_at=excluded.updated_at""",
+            (key, value, int(time.time())),
+        )
+
+
+def delete_all_blocks() -> int:
+    """Used when the work-event-title changes — old blocks were for a different
+    title and should be cleared so the next poll can repopulate cleanly."""
+    with connect() as conn:
+        cur = conn.execute("DELETE FROM work_blocks")
+        return cur.rowcount
 
 
 # --- Poll log ---

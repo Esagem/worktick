@@ -44,6 +44,9 @@ class MoneyTickerWidgetProvider : AppWidgetProvider() {
     override fun onDisabled(context: Context) {
         super.onDisabled(context)
         cancelTicking(context)
+        // Last widget instance was removed. Drop the foreground ticker too —
+        // it has nothing to update and would otherwise burn battery for nothing.
+        WidgetTickerService.stop(context)
     }
 
     override fun onUpdate(
@@ -77,7 +80,7 @@ class MoneyTickerWidgetProvider : AppWidgetProvider() {
         val views = RemoteViews(context.packageName, R.layout.worktick_money)
         applyWidgetData(context, views)
 
-        val openIntent = Intent(context, SmoothActivity::class.java).apply {
+        val openIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         val openPi = PendingIntent.getActivity(
@@ -104,6 +107,19 @@ class MoneyTickerWidgetProvider : AppWidgetProvider() {
 
     enum class State { ON, OFF, SYNC }
 
+    /**
+     * Paint instances that get reused across every renderTerminalBitmap call.
+     * Avoids ~per-tick GC churn from the small-but-frequent allocations the canvas
+     * paints used to spawn (notably scanPaint, which gets used ~30× per render).
+     * Companion-scoped because rendering is synchronized on the main thread —
+     * Provider.onReceive and WidgetTickerService.tick can't run concurrently.
+     */
+    private object SharedPaints {
+        val bg = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+        val border = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 2.5f }
+        val scan = Paint().apply { color = Color.argb(5, 255, 255, 255) }
+    }
+
     companion object {
         const val ACTION_TICK = "dev.surge.worktick.TICK"
         const val ACTION_REFRESH = "dev.surge.worktick.REFRESH"
@@ -124,7 +140,10 @@ class MoneyTickerWidgetProvider : AppWidgetProvider() {
                 Intent(context, MoneyTickerWidgetProvider::class.java).apply { action = ACTION_TICK },
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
-            if (!active) {
+            // Foreground service is the canonical update source when running. Skip the
+            // alarm path so the device isn't woken every cent boundary by both — major
+            // battery saving during active blocks.
+            if (!active || WidgetTickerService.isRunning) {
                 am.cancel(pi)
                 return
             }
@@ -297,24 +316,21 @@ class MoneyTickerWidgetProvider : AppWidgetProvider() {
             val rule = Color.parseColor("#1A1D22")
             val bg = Color.parseColor("#0B0D10")
 
-            // Background + thin accent-tinted border + scanlines
-            val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = bg; style = Paint.Style.FILL }
+            // Background + thin accent-tinted border + scanlines (reuses SharedPaints)
             val radius = 36f
-            canvas.drawRoundRect(RectF(0f, 0f, w.toFloat(), h.toFloat()), radius, radius, bgPaint)
+            SharedPaints.bg.color = bg
+            canvas.drawRoundRect(RectF(0f, 0f, w.toFloat(), h.toFloat()), radius, radius, SharedPaints.bg)
 
-            val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = accentDim; style = Paint.Style.STROKE; strokeWidth = 2.5f
-            }
+            SharedPaints.border.color = accentDim
             val inset = 1f
             canvas.drawRoundRect(
                 RectF(inset, inset, w - inset, h - inset),
                 radius - inset, radius - inset,
-                borderPaint
+                SharedPaints.border
             )
 
-            val scanPaint = Paint().apply { color = Color.argb(5, 255, 255, 255) }
             var y = 0
-            while (y < h) { canvas.drawRect(0f, y.toFloat(), w.toFloat(), y + 1f, scanPaint); y += 6 }
+            while (y < h) { canvas.drawRect(0f, y.toFloat(), w.toFloat(), y + 1f, SharedPaints.scan); y += 6 }
 
             // Fonts
             val mono = ResourcesCompat.getFont(context, R.font.jetbrains_mono_bold)

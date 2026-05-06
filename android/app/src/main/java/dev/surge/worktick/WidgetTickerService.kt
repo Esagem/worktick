@@ -6,9 +6,11 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.appwidget.AppWidgetManager
+import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.Handler
@@ -21,6 +23,25 @@ class WidgetTickerService : Service() {
 
     private val handler = Handler(Looper.getMainLooper())
     private lateinit var notificationManager: NotificationManager
+    private var screenOff = false
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            when (intent.action) {
+                Intent.ACTION_SCREEN_OFF -> {
+                    // Pause ticking until the screen comes back on. The current tick's
+                    // re-post in the runnable will see screenOff=true and skip.
+                    screenOff = true
+                }
+                Intent.ACTION_SCREEN_ON -> if (screenOff) {
+                    screenOff = false
+                    // Catch-up tick immediately so the user sees the current value the
+                    // moment they look at the phone, then resume the cent-aligned cadence.
+                    handler.removeCallbacks(tick)
+                    handler.post(tick)
+                }
+            }
+        }
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -28,6 +49,14 @@ class WidgetTickerService : Service() {
         super.onCreate()
         notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         ensureChannel()
+        isRunning = true
+        // Service is now the canonical update source — silence the AlarmManager-based
+        // fallback so the device doesn't get woken every cent boundary by both paths.
+        MoneyTickerWidgetProvider.cancelTicking(this)
+        registerReceiver(screenReceiver, IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_SCREEN_ON)
+        })
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -44,17 +73,35 @@ class WidgetTickerService : Service() {
 
     override fun onDestroy() {
         handler.removeCallbacks(tick)
+        try { unregisterReceiver(screenReceiver) } catch (_: Throwable) {}
+        isRunning = false
+        // If we're stopping but a block is still active, hand back to the AlarmManager
+        // path so the widget stays live (just less smoothly).
+        ScheduleStore.read(this)?.let { schedule ->
+            val now = System.currentTimeMillis() / 1000
+            if (schedule.blocks.any { it.start <= now && now < it.end }) {
+                MoneyTickerWidgetProvider.schedulePartialTick(this, schedule)
+            }
+        }
         super.onDestroy()
     }
 
     private val tick = object : Runnable {
         override fun run() {
             val schedule = ScheduleStore.read(this@WidgetTickerService)
-            if (schedule == null || !hasActiveBlock(schedule)) {
+            if (schedule == null || !hasActiveBlock(schedule) || !hasWidgetInstance()) {
+                // Block ended, schedule cleared, or widget was removed from the
+                // home screen. Stop the FGS so we're not burning power for nothing.
                 stopSelf()
                 return
             }
             tickWidget()
+            if (screenOff) {
+                // Screen is off — no eyes on the widget. Don't re-post; ACTION_SCREEN_ON
+                // will re-arm us. The single tick we just did keeps the widget current
+                // for AOD / pull-down-shade peeks until then.
+                return
+            }
             handler.postDelayed(this, MoneyTickerWidgetProvider.nextCentTickMs(schedule))
         }
     }
@@ -62,6 +109,11 @@ class WidgetTickerService : Service() {
     private fun hasActiveBlock(schedule: Schedule): Boolean {
         val now = System.currentTimeMillis() / 1000
         return schedule.blocks.any { it.start <= now && now < it.end }
+    }
+
+    private fun hasWidgetInstance(): Boolean {
+        val mgr = AppWidgetManager.getInstance(this)
+        return mgr.getAppWidgetIds(ComponentName(this, MoneyTickerWidgetProvider::class.java)).isNotEmpty()
     }
 
     private fun tickWidget() {
@@ -76,7 +128,7 @@ class WidgetTickerService : Service() {
     }
 
     private fun buildSilentNotification(): Notification {
-        val openIntent = Intent(this, SmoothActivity::class.java).apply {
+        val openIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         val openPi = PendingIntent.getActivity(
@@ -119,6 +171,12 @@ class WidgetTickerService : Service() {
     companion object {
         private const val CHANNEL_ID = "worktick_widget_updater"
         private const val NOTIF_ID = 4243
+
+        /** Read by MoneyTickerWidgetProvider so the alarm-based ticker doesn't double-up
+         *  with the FGS handler. Safe to read without a lock — single writer (this service
+         *  on its main thread) and readers tolerate stale values. */
+        @Volatile var isRunning: Boolean = false
+            private set
 
         fun start(context: Context) {
             val intent = Intent(context, WidgetTickerService::class.java)

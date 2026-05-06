@@ -7,7 +7,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI, HTTPException, Header, Query, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from . import config, db, google_client, poller
+from . import config, db, google_client, poller, runtime_config
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -59,7 +59,8 @@ def root():
     return {
         "ok": True,
         "authenticated": db.get_tokens() is not None,
-        "work_event_title": config.WORK_EVENT_TITLE,
+        "work_event_title": runtime_config.work_event_title(),
+        "hourly_rate": runtime_config.hourly_rate(),
         "poll_interval_seconds": config.POLL_INTERVAL_SECONDS,
         "last_poll": dict(last) if last else None,
     }
@@ -98,6 +99,50 @@ def force_poll(authorization: str | None = Header(None)):
     return poller.poll_once()
 
 
+@app.get("/admin/config")
+def get_admin_config(authorization: str | None = Header(None)):
+    _check_secret(authorization)
+    return {
+        "hourly_rate": runtime_config.hourly_rate(),
+        "work_event_title": runtime_config.work_event_title(),
+    }
+
+
+@app.post("/admin/config")
+def update_admin_config(payload: dict, authorization: str | None = Header(None)):
+    """Partial-update mutable config. If the work-event-title changes, all
+    cached blocks are dropped (they were for a different title) and a fresh
+    Calendar poll runs synchronously so the next /schedule has clean data."""
+    _check_secret(authorization)
+
+    title_changed = False
+    if "hourly_rate" in payload:
+        try:
+            runtime_config.set_hourly_rate(float(payload["hourly_rate"]))
+        except (TypeError, ValueError) as e:
+            raise HTTPException(400, f"Invalid hourly_rate: {e}")
+    if "work_event_title" in payload:
+        try:
+            new_title = str(payload["work_event_title"])
+            if new_title.strip() != runtime_config.work_event_title():
+                title_changed = True
+            runtime_config.set_work_event_title(new_title)
+        except ValueError as e:
+            raise HTTPException(400, f"Invalid work_event_title: {e}")
+
+    if title_changed:
+        db.delete_all_blocks()
+        try:
+            poller.poll_once()
+        except Exception:
+            log.exception("Post-title-change poll failed")
+
+    return {
+        "hourly_rate": runtime_config.hourly_rate(),
+        "work_event_title": runtime_config.work_event_title(),
+    }
+
+
 @app.get("/schedule")
 def schedule(response: Response, authorization: str | None = Header(None)):
     """Return the full block list and config. Widget computes totals locally."""
@@ -113,7 +158,8 @@ def schedule(response: Response, authorization: str | None = Header(None)):
     return {
         "fetched_at": last["polled_at"] if last else None,
         "timezone": str(config.TIMEZONE),
-        "hourly_rate": config.HOURLY_RATE,
+        "hourly_rate": runtime_config.hourly_rate(),
+        "work_event_title": runtime_config.work_event_title(),
         "blocks": [
             {"start": r["instance_start"], "end": r["instance_end"]}
             for r in rows

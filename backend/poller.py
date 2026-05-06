@@ -3,7 +3,7 @@ import logging
 import time
 from datetime import datetime, timedelta, timezone
 
-from . import config, db, google_client
+from . import config, db, google_client, runtime_config
 
 
 log = logging.getLogger(__name__)
@@ -20,7 +20,7 @@ def _parse_event_time(t: dict) -> int:
 
 def _matches_work_title(event: dict) -> bool:
     summary = (event.get("summary") or "").strip().casefold()
-    target = config.WORK_EVENT_TITLE.strip().casefold()
+    target = runtime_config.work_event_title().strip().casefold()
     return summary == target
 
 
