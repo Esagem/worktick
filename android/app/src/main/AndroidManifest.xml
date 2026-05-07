@@ -45,6 +45,17 @@
         </activity>
 
         <activity
+            android:name=".ui.SignInActivity"
+            android:exported="false"
+            android:theme="@style/Theme.WorkTick" />
+
+        <activity
+            android:name=".ui.SettingsActivity"
+            android:exported="false"
+            android:theme="@style/Theme.WorkTick"
+            android:parentActivityName=".MainActivity" />
+
+        <activity
             android:name=".SmoothActivity"
             android:exported="false"
             android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"

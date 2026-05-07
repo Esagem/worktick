@@ -3,6 +3,7 @@
 
 sdk.dir=/path/to/your/Android/Sdk
 
-# WorkTick backend
-BACKEND_URL=https://your-fly-app.fly.dev
-API_SECRET=paste-your-API_SHARED_SECRET-here
+# Google OAuth Client ID. Register the package dev.surge.worktick with your
+# debug + release SHA-1 fingerprints at:
+#   https://console.cloud.google.com/apis/credentials
+GOOGLE_OAUTH_CLIENT_ID=000000000000-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.apps.googleusercontent.com

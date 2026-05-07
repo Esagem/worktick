@@ -1,5 +1,6 @@
 package dev.surge.worktick
 
+import android.app.KeyguardManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -12,10 +13,13 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ServiceInfo
+import android.hardware.display.DisplayManager
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.util.Log
+import android.view.Display
 import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
 
@@ -23,22 +27,45 @@ class WidgetTickerService : Service() {
 
     private val handler = Handler(Looper.getMainLooper())
     private lateinit var notificationManager: NotificationManager
-    private var screenOff = false
+    private lateinit var keyguardManager: KeyguardManager
+    private lateinit var displayManager: DisplayManager
+
+    // Diagnostic counters — reset on service start, logged on stop. Lets us
+    // verify post-fix that screen-off ticks really are zero. All increments
+    // happen on the main thread (handler runs there), so no atomic needed.
+    private var renderedTicks: Long = 0L
+    private var skippedKeyguard: Long = 0L
+    private var skippedDisplayOff: Long = 0L
+
+    /**
+     * "Is the user actively looking at the phone right now?"
+     *
+     * `Display.STATE_ON` (not `PowerManager.isInteractive()`) is the canonical
+     * "fully-on display" signal. AOD maps to `STATE_DOZE`/`STATE_DOZE_SUSPEND`,
+     * which we want to skip — `isInteractive()` returns true on AOD on Samsung,
+     * which previously caused the widget to keep ticking through AOD updates and
+     * burn far more battery than expected. `isKeyguardLocked()` then catches the
+     * lock-screen-with-screen-on case (user briefly woke phone but didn't unlock).
+     */
+    private fun isUserLooking(): Boolean {
+        if (keyguardManager.isKeyguardLocked) return false
+        val display = displayManager.getDisplay(Display.DEFAULT_DISPLAY) ?: return false
+        return display.state == Display.STATE_ON
+    }
+
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
-                Intent.ACTION_SCREEN_OFF -> {
-                    // Pause ticking until the screen comes back on. The current tick's
-                    // re-post in the runnable will see screenOff=true and skip.
-                    screenOff = true
-                }
-                Intent.ACTION_SCREEN_ON -> if (screenOff) {
-                    screenOff = false
-                    // Catch-up tick immediately so the user sees the current value the
-                    // moment they look at the phone, then resume the cent-aligned cadence.
+                // Each of these can transition us from "not looking" to "maybe looking"
+                // — kick off an immediate evaluation. The tick runnable itself decides
+                // whether to actually render based on isUserLooking().
+                Intent.ACTION_SCREEN_ON,
+                Intent.ACTION_USER_PRESENT -> {
                     handler.removeCallbacks(tick)
                     handler.post(tick)
                 }
+                // No SCREEN_OFF handler needed — the next scheduled tick will check
+                // isUserLooking(), see false, and stop re-posting itself.
             }
         }
     }
@@ -48,14 +75,23 @@ class WidgetTickerService : Service() {
     override fun onCreate() {
         super.onCreate()
         notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+        displayManager = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
         ensureChannel()
+        renderedTicks = 0L
+        skippedKeyguard = 0L
+        skippedDisplayOff = 0L
         isRunning = true
         // Service is now the canonical update source — silence the AlarmManager-based
         // fallback so the device doesn't get woken every cent boundary by both paths.
         MoneyTickerWidgetProvider.cancelTicking(this)
         registerReceiver(screenReceiver, IntentFilter().apply {
-            addAction(Intent.ACTION_SCREEN_OFF)
+            // SCREEN_ON catches the "phone-was-already-unlocked, briefly-locked-by-power-button,
+            // power-button-pressed-again-to-wake" path that USER_PRESENT misses. Spurious
+            // SCREEN_ON during Samsung AOD is harmless — the tick handler's STATE_ON check
+            // filters those without rendering.
             addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_USER_PRESENT)
         })
     }
 
@@ -75,6 +111,9 @@ class WidgetTickerService : Service() {
         handler.removeCallbacks(tick)
         try { unregisterReceiver(screenReceiver) } catch (_: Throwable) {}
         isRunning = false
+        Log.i(TAG,
+            "stopped: rendered=$renderedTicks " +
+            "skipped(keyguard)=$skippedKeyguard skipped(display-off)=$skippedDisplayOff")
         // If we're stopping but a block is still active, hand back to the AlarmManager
         // path so the widget stays live (just less smoothly).
         ScheduleStore.read(this)?.let { schedule ->
@@ -95,13 +134,19 @@ class WidgetTickerService : Service() {
                 stopSelf()
                 return
             }
-            tickWidget()
-            if (screenOff) {
-                // Screen is off — no eyes on the widget. Don't re-post; ACTION_SCREEN_ON
-                // will re-arm us. The single tick we just did keeps the widget current
-                // for AOD / pull-down-shade peeks until then.
+            // Two-stage filter so we can attribute skipped ticks to the right cause
+            // in the diagnostic log.
+            if (keyguardManager.isKeyguardLocked) {
+                skippedKeyguard++
                 return
             }
+            val display = displayManager.getDisplay(Display.DEFAULT_DISPLAY)
+            if (display == null || display.state != Display.STATE_ON) {
+                skippedDisplayOff++
+                return
+            }
+            renderedTicks++
+            tickWidget()
             handler.postDelayed(this, MoneyTickerWidgetProvider.nextCentTickMs(schedule))
         }
     }
@@ -169,6 +214,7 @@ class WidgetTickerService : Service() {
     }
 
     companion object {
+        private const val TAG = "WidgetTickerService"
         private const val CHANNEL_ID = "worktick_widget_updater"
         private const val NOTIF_ID = 4243
 

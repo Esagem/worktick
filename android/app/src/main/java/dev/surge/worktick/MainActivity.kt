@@ -1,11 +1,9 @@
 package dev.surge.worktick
 
-import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -30,6 +28,11 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.edit
 import androidx.core.content.res.ResourcesCompat
+import dev.surge.worktick.auth.GoogleAuthManager
+import dev.surge.worktick.calendar.SchedulePoller
+import dev.surge.worktick.ui.SettingsActivity
+import dev.surge.worktick.ui.SignInActivity
+import kotlinx.coroutines.runBlocking
 import java.text.NumberFormat
 import java.time.DayOfWeek
 import java.time.Instant
@@ -65,7 +68,6 @@ class MainActivity : Activity() {
 
     // Permissions refs
     private lateinit var batteryStatus: TextView
-    private lateinit var notifStatus: TextView
     private lateinit var allowBackgroundBtn: Button
 
     private var monoBold: Typeface? = null
@@ -81,6 +83,11 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (!GoogleAuthManager(this).isAuthenticated()) {
+            startActivity(Intent(this, SignInActivity::class.java))
+            finish()
+            return
+        }
         monoBold = ResourcesCompat.getFont(this, R.font.jetbrains_mono_bold)
         monoMedium = ResourcesCompat.getFont(this, R.font.jetbrains_mono_medium)
         setContentView(buildUi())
@@ -88,6 +95,12 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        if (!GoogleAuthManager(this).isAuthenticated()) {
+            // Returning from Settings → Sign out → bounce back to sign-in.
+            startActivity(Intent(this, SignInActivity::class.java))
+            finish()
+            return
+        }
         // Foreground-state context: reconcile the ticker service against the current
         // schedule. Covers mid-block widget installs and any path where the boundary
         // alarm hasn't had a chance to fire yet.
@@ -304,7 +317,7 @@ class MainActivity : Activity() {
 
     private fun renderFetched(schedule: Schedule?) {
         if (schedule == null) {
-            fetchedLine.text = "Schedule never fetched · awaiting backend"
+            fetchedLine.text = "Schedule never fetched · awaiting sync"
             return
         }
         val ago = System.currentTimeMillis() / 1000 - schedule.fetchedAt
@@ -322,18 +335,6 @@ class MainActivity : Activity() {
             batteryStatus.setTextColor(Color.parseColor("#FF4D5C"))
             allowBackgroundBtn.visibility = View.VISIBLE
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val granted = checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
-            if (granted) {
-                notifStatus.text = "✓  Notifications allowed"
-                notifStatus.setTextColor(Color.parseColor("#3DFF9A"))
-            } else {
-                notifStatus.text = "⚠  Notifications denied"
-                notifStatus.setTextColor(Color.parseColor("#FF4D5C"))
-            }
-        } else {
-            notifStatus.visibility = View.GONE
-        }
     }
 
     // ───────────────────────── Permission flow ─────────────────────────
@@ -342,10 +343,12 @@ class MainActivity : Activity() {
         val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         if (prefs.getBoolean(KEY_PROMPTED, false)) return
         prefs.edit { putBoolean(KEY_PROMPTED, true) }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQ_NOTIF)
-        }
+        // Notifications: intentionally not requested. The FGS notification is
+        // IMPORTANCE_MIN + VISIBILITY_SECRET (no status bar icon, hidden in the
+        // expanded shade), so the permission adds friction without user value.
+        // The FGS still runs cleanly on Android 13+ when POST_NOTIFICATIONS is
+        // denied. Users who want a "service running" indicator can opt in via
+        // Settings → Apps → WorkTick → Notifications.
         if (!isWhitelisted()) requestBatteryWhitelist()
     }
 
@@ -506,19 +509,16 @@ class MainActivity : Activity() {
         batteryStatus = TextView(this).apply {
             textSize = 14f
             typeface = monoBold
-            setPadding(0, dp(8), 0, dp(2))
+            setPadding(0, dp(8), 0, dp(16))
         }
         container.addView(batteryStatus)
-        notifStatus = TextView(this).apply {
-            textSize = 14f
-            typeface = monoBold
-            setPadding(0, dp(2), 0, dp(16))
-        }
-        container.addView(notifStatus)
 
         allowBackgroundBtn = primaryButton("ALLOW BACKGROUND ACTIVITY") { requestBatteryWhitelist() }
         container.addView(allowBackgroundBtn)
         container.addView(secondaryButton("OPEN APP BATTERY SETTINGS") { openAppDetails() })
+        container.addView(secondaryButton("SETTINGS · SIGN OUT · DIAGNOSTICS") {
+            startActivity(Intent(this, SettingsActivity::class.java))
+        })
 
         scroll.addView(container)
         return scroll
@@ -665,27 +665,35 @@ class MainActivity : Activity() {
 
     // ───────────────────────── Sync + edit dialogs ─────────────────────────
 
-    private fun triggerSync(forcePoll: Boolean) {
+    private fun triggerSync(@Suppress("UNUSED_PARAMETER") forcePoll: Boolean) {
         if (syncButton.text == "SYNCING…") return
         syncButton.text = "SYNCING…"
         syncButton.setTextColor(Color.parseColor("#FFB22C"))
         Thread {
-            val error = try {
-                if (forcePoll) BackendClient.forcePoll()
-                BackendClient.fetchSchedule(this)
-                null
-            } catch (e: Exception) { e.message ?: e.toString() }
+            val pollResult = runBlocking { SchedulePoller(this@MainActivity).pollOnce() }
             handler.post {
-                if (error == null) {
-                    syncButton.text = "SYNCED ✓"
-                    syncButton.setTextColor(Color.parseColor("#3DFF9A"))
-                    handler.postDelayed({ resetSyncButton() }, 1500)
-                    renderEverything()
-                } else {
-                    syncButton.text = "SYNC FAILED"
-                    syncButton.setTextColor(Color.parseColor("#FF4D5C"))
-                    Toast.makeText(this, "Sync failed: $error", Toast.LENGTH_LONG).show()
-                    handler.postDelayed({ resetSyncButton() }, 2500)
+                when (pollResult) {
+                    is SchedulePoller.Result.Ok -> {
+                        ScheduleStore.write(this, pollResult.schedule)
+                        MoneyTickerWidgetProvider.requestUpdate(this)
+                        syncButton.text = "SYNCED ✓"
+                        syncButton.setTextColor(Color.parseColor("#3DFF9A"))
+                        handler.postDelayed({ resetSyncButton() }, 1500)
+                        renderEverything()
+                    }
+                    SchedulePoller.Result.NotAuthenticated -> {
+                        syncButton.text = "SIGN IN"
+                        syncButton.setTextColor(Color.parseColor("#FF4D5C"))
+                        Toast.makeText(this, "Sign-in expired — please sign in again", Toast.LENGTH_LONG).show()
+                        startActivity(Intent(this, SignInActivity::class.java))
+                        finish()
+                    }
+                    is SchedulePoller.Result.Error -> {
+                        syncButton.text = "SYNC FAILED"
+                        syncButton.setTextColor(Color.parseColor("#FF4D5C"))
+                        Toast.makeText(this, "Sync failed: ${pollResult.message}", Toast.LENGTH_LONG).show()
+                        handler.postDelayed({ resetSyncButton() }, 2500)
+                    }
                 }
             }
         }.start()
@@ -732,7 +740,7 @@ class MainActivity : Activity() {
         }
         showEditDialog(
             title = "Calendar event title",
-            subtitle = "Backend re-polls Google Calendar after a change. " +
+            subtitle = "Re-polls Google Calendar after a change. " +
                        "Old blocks are cleared so only events with the new title count.",
             input = input,
             onSave = {
@@ -748,28 +756,53 @@ class MainActivity : Activity() {
     }
 
     private fun pushConfigUpdate(rate: Double?, title: String?) {
-        syncButton.text = "SYNCING…"
-        syncButton.setTextColor(Color.parseColor("#FFB22C"))
-        Thread {
-            val error = try {
-                BackendClient.updateConfig(rate = rate, title = title)
-                BackendClient.fetchSchedule(this)
-                null
-            } catch (e: Exception) { e.message ?: e.toString() }
-            handler.post {
-                if (error == null) {
-                    syncButton.text = "UPDATED ✓"
-                    syncButton.setTextColor(Color.parseColor("#3DFF9A"))
-                    handler.postDelayed({ resetSyncButton() }, 1500)
-                    renderEverything()
-                } else {
-                    syncButton.text = "FAILED"
-                    syncButton.setTextColor(Color.parseColor("#FF4D5C"))
-                    Toast.makeText(this, "Update failed: $error", Toast.LENGTH_LONG).show()
-                    handler.postDelayed({ resetSyncButton() }, 2500)
+        // Persist to WTSettings synchronously. Rate changes are applied to the
+        // cached Schedule immediately so the widget + UI reflect them before the
+        // next poll. Title changes require a re-poll (different events match),
+        // so we kick a one-shot worker.
+        rate?.let { WTSettings.setHourlyRate(this, it) }
+        title?.let { WTSettings.setEventTitle(this, it) }
+
+        val cached = ScheduleStore.read(this)
+        if (cached != null && rate != null) {
+            ScheduleStore.write(this, cached.copy(hourlyRate = rate))
+        }
+        if (cached != null && title != null) {
+            ScheduleStore.write(this, cached.copy(workEventTitle = title))
+        }
+        MoneyTickerWidgetProvider.requestUpdate(this)
+        renderEverything()
+
+        if (title != null) {
+            // Title change → kick a fresh poll so blocks reflect the new filter.
+            syncButton.text = "SYNCING…"
+            syncButton.setTextColor(Color.parseColor("#FFB22C"))
+            Thread {
+                val pollResult = runBlocking { SchedulePoller(this@MainActivity).pollOnce() }
+                handler.post {
+                    when (pollResult) {
+                        is SchedulePoller.Result.Ok -> {
+                            ScheduleStore.write(this, pollResult.schedule)
+                            MoneyTickerWidgetProvider.requestUpdate(this)
+                            syncButton.text = "UPDATED ✓"
+                            syncButton.setTextColor(Color.parseColor("#3DFF9A"))
+                            handler.postDelayed({ resetSyncButton() }, 1500)
+                            renderEverything()
+                        }
+                        SchedulePoller.Result.NotAuthenticated -> {
+                            startActivity(Intent(this, SignInActivity::class.java))
+                            finish()
+                        }
+                        is SchedulePoller.Result.Error -> {
+                            syncButton.text = "FAILED"
+                            syncButton.setTextColor(Color.parseColor("#FF4D5C"))
+                            Toast.makeText(this, "Update failed: ${pollResult.message}", Toast.LENGTH_LONG).show()
+                            handler.postDelayed({ resetSyncButton() }, 2500)
+                        }
+                    }
                 }
-            }
-        }.start()
+            }.start()
+        }
     }
 
     private fun showEditDialog(
@@ -1016,7 +1049,6 @@ class MainActivity : Activity() {
     companion object {
         private const val PREFS = "worktick"
         private const val KEY_PROMPTED = "first_launch_prompts_done"
-        private const val REQ_NOTIF = 100
     }
 }
 

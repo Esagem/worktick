@@ -34,14 +34,13 @@ These values get baked into `BuildConfig.BACKEND_URL` and `BuildConfig.API_SECRE
 - Click the green ▶ play button
 - App installs and launches with a "WorkTick" splash screen
 
-## 4. First launch — grant background permissions
+## 4. First launch — grant background permission
 
-Open the WorkTick app once after installing. It will:
+Open the WorkTick app once after installing. It will ask to **ignore battery optimizations** — tap **Allow**. On Samsung this is the same as setting Battery → **Unrestricted**.
 
-1. Ask for **notification permission** (Android 13+). Tap **Allow** — the notification stays silent and hidden in the shade, but it's required to legalize the foreground ticker service.
-2. Ask to **ignore battery optimizations**. Tap **Allow** — on Samsung this is the same as setting Battery → **Unrestricted**.
+The home screen shows a `✓ Background activity allowed` line so you can confirm. If you accidentally denied, tap **Allow background activity** to re-fire the system dialog.
 
-The home screen of the app shows two status lines (`✓ Background activity allowed`, `✓ Notifications allowed`) so you can confirm both were granted. If you accidentally denied either, tap **Allow background activity** to re-fire the system dialog.
+**Notifications are deliberately not requested.** The foreground ticker service uses an `IMPORTANCE_MIN` / `VISIBILITY_SECRET` notification channel that has no status bar icon and is hidden in the expanded shade — granting the permission adds friction without user value. The FGS still runs cleanly on Android 13+ when `POST_NOTIFICATIONS` is denied (which is the default state on a fresh install). If you want a "service running" indicator anyway, enable it manually via Settings → Apps → WorkTick → Notifications.
 
 There's one Samsung-specific toggle that has no public API and can't be granted programmatically — see step 6 below.
 
@@ -82,9 +81,9 @@ Install **Good Lock** from the Galaxy Store, then the **LockStar** module. After
 - Check backend is reachable: `curl https://your-fly-app.fly.dev/`.
 
 **Widget never updates faster than every 30 minutes**
-- Check the foreground service is actually running. Settings → Apps → WorkTick → Notifications → "Widget updater" channel should be enabled.
-- Open the WorkTick app and verify both status lines show ✓. If either shows ⚠, tap the corresponding button to re-grant.
+- Open the WorkTick app and verify the `Background activity allowed` line shows ✓. If it shows ⚠, tap **Allow background activity**.
 - On Samsung, also confirm WorkTick is in **Never sleeping apps** (step 6 above).
+- If you want to confirm the foreground ticker service is actually running, enable its (silent) notification: Settings → Apps → WorkTick → Notifications → "Widget updater" channel → toggle on. The notification will show in the expanded shade while the service ticks.
 
 **Widget missing from picker after install**
 - Force-stop the app, reboot the phone, try again.
