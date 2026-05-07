@@ -1,18 +1,22 @@
 // WorkTickConfig.example.swift
 //
-// Copy this file to WorkTickConfig.swift and fill in real values.
-// WorkTickConfig.swift is gitignored — do NOT commit it.
+// Optional debug overrides. The app runs fine without this file — copy to
+// WorkTickConfig.swift only if you need one of the debug switches below.
+// WorkTickConfig.swift is gitignored.
 //
-// Add WorkTickConfig.swift to BOTH the app target AND the widget extension target
-// (right-click in Xcode → Target Membership).
+// As of the EventKit refactor, WorkTick no longer requires a backend or a
+// shared API secret on iOS. Calendar access is granted by the user via the
+// system permission prompt; events come from EventKit directly.
 
 import Foundation
 
 enum WorkTickConfig {
-    /// Backend base URL (your Fly.io app URL)
-    static let backendURL = URL(string: "https://YOUR-APP.fly.dev")!
+    /// Force-active mode: when true, the dashboard pretends the user is
+    /// currently working even if no calendar block is active. Useful for
+    /// screenshotting the live ticker UI. Leave false in normal use.
+    static let debugForceActiveBlock: Bool = false
 
-    /// API_SHARED_SECRET from your Fly secrets — same value as in
-    /// android/local.properties API_SECRET
-    static let apiSecret = "PASTE_API_SHARED_SECRET_HERE"
+    /// Override the EventKit polling lookahead (days). Default 14, defined
+    /// in WTEventKitPoller.lookaheadDays.
+    static let debugLookaheadDaysOverride: Int? = nil
 }

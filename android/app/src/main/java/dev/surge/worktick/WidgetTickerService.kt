@@ -64,6 +64,12 @@ class WidgetTickerService : Service() {
                     handler.removeCallbacks(tick)
                     handler.post(tick)
                 }
+                ACTION_DUMP_COUNTERS -> {
+                    Log.i(TAG,
+                        "counters: rendered=$renderedTicks " +
+                        "skipped(keyguard)=$skippedKeyguard " +
+                        "skipped(display-off)=$skippedDisplayOff")
+                }
                 // No SCREEN_OFF handler needed — the next scheduled tick will check
                 // isUserLooking(), see false, and stop re-posting itself.
             }
@@ -85,14 +91,27 @@ class WidgetTickerService : Service() {
         // Service is now the canonical update source — silence the AlarmManager-based
         // fallback so the device doesn't get woken every cent boundary by both paths.
         MoneyTickerWidgetProvider.cancelTicking(this)
-        registerReceiver(screenReceiver, IntentFilter().apply {
+        // RECEIVER_EXPORTED required on API 34+ for dynamic receivers; we accept
+        // broadcasts from shell (adb) for the diagnostic dump action. SCREEN_ON
+        // and USER_PRESENT are protected system broadcasts so the flag is moot
+        // for them.
+        val filter = IntentFilter().apply {
             // SCREEN_ON catches the "phone-was-already-unlocked, briefly-locked-by-power-button,
             // power-button-pressed-again-to-wake" path that USER_PRESENT misses. Spurious
             // SCREEN_ON during Samsung AOD is harmless — the tick handler's STATE_ON check
             // filters those without rendering.
             addAction(Intent.ACTION_SCREEN_ON)
             addAction(Intent.ACTION_USER_PRESENT)
-        })
+            addAction(ACTION_DUMP_COUNTERS)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(screenReceiver, filter, Context.RECEIVER_EXPORTED)
+        } else {
+            registerReceiver(screenReceiver, filter)
+        }
+        // Kick off the tick loop. Once per service lifetime; subsequent start()
+        // calls (and onStartCommand replays) won't disturb the cent-aligned cadence.
+        handler.post(tick)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -102,8 +121,10 @@ class WidgetTickerService : Service() {
         } else {
             startForeground(NOTIF_ID, notif)
         }
-        handler.removeCallbacks(tick)
-        handler.post(tick)
+        // NOTE: tick-loop kickoff lives in onCreate, NOT here. onStartCommand can be
+        // called repeatedly (system replays, redundant start() calls). Re-posting tick
+        // here would cancel the cent-aligned postDelayed and re-fire immediately —
+        // a runaway loop that burned 200K ticks / 30 min in measurement.
         return START_STICKY
     }
 
@@ -218,6 +239,13 @@ class WidgetTickerService : Service() {
         private const val CHANNEL_ID = "worktick_widget_updater"
         private const val NOTIF_ID = 4243
 
+        /**
+         * Dump current diagnostic counters to logcat. Trigger via:
+         *   adb shell am broadcast -a dev.surge.worktick.DUMP_COUNTERS
+         * Then read with `adb logcat -d -s WidgetTickerService:I`.
+         */
+        const val ACTION_DUMP_COUNTERS = "dev.surge.worktick.DUMP_COUNTERS"
+
         /** Read by MoneyTickerWidgetProvider so the alarm-based ticker doesn't double-up
          *  with the FGS handler. Safe to read without a lock — single writer (this service
          *  on its main thread) and readers tolerate stale values. */
@@ -225,6 +253,10 @@ class WidgetTickerService : Service() {
             private set
 
         fun start(context: Context) {
+            // Already up — skip the binder round-trip + onStartCommand replay.
+            // applyWidgetData calls this every tick as a reconcile, and pre-fix the
+            // resulting onStartCommand was reposting tick at zero delay → runaway.
+            if (isRunning) return
             val intent = Intent(context, WidgetTickerService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
