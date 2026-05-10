@@ -11,9 +11,11 @@ public final class WTLiveActivityController {
     public static let shared = WTLiveActivityController()
 
     private var current: Activity<WTActivityAttributes>?
+    private let settings: WTSettings
     public private(set) var lastError: String?
 
-    public init() {
+    public init(settings: WTSettings = .shared) {
+        self.settings = settings
         // On launch, adopt any in-flight activity left over from a previous run
         // (e.g. app was killed but block is still active).
         self.current = Activity<WTActivityAttributes>.activities.first
@@ -21,6 +23,13 @@ public final class WTLiveActivityController {
 
     /// Reconcile against the current schedule. Idempotent — call freely.
     public func reconcile(schedule: Schedule, now: Date = Date()) {
+        // Opt-in only. If the user disabled Live Activities in Settings, end
+        // any leftover activity and never start a new one.
+        guard settings.liveActivityEnabled else {
+            Task { await stopCurrent() }
+            return
+        }
+
         let computed = WTMath.allTime(blocks: schedule.blocks, now: now)
 
         if let activeStart = computed.activeStart {

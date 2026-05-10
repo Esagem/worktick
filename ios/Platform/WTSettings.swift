@@ -18,6 +18,7 @@ public enum WTSettingsKey {
     public static let lastPollAt          = "last_poll_at"          // unix seconds
     public static let lastPollError       = "last_poll_error"
     public static let eventKitAuthorized  = "event_kit_authorized"  // cached
+    public static let liveActivityEnabled = "live_activity_enabled" // user opt-in
 }
 
 public enum WTSettingsDefaults {
@@ -103,5 +104,16 @@ public final class WTSettings {
     public var eventKitAuthorized: Bool {
         get { store.bool(forKey: WTSettingsKey.eventKitAuthorized) }
         set { store.set(newValue, forKey: WTSettingsKey.eventKitAuthorized) }
+    }
+
+    // MARK: Live Activity opt-in
+
+    /// User opt-in for Live Activity (lock screen + Dynamic Island). Off by
+    /// default — the home screen widget is the primary surface, the Live
+    /// Activity is optional. Defaults to false; UserDefaults.bool returns
+    /// false for missing keys, which is exactly what we want.
+    public var liveActivityEnabled: Bool {
+        get { store.bool(forKey: WTSettingsKey.liveActivityEnabled) }
+        set { store.set(newValue, forKey: WTSettingsKey.liveActivityEnabled) }
     }
 }

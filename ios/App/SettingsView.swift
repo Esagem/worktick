@@ -15,6 +15,7 @@ struct SettingsView: View {
     @State private var titleText: String = ""
     @State private var calendars: [EKCalendar] = []
     @State private var selected: Set<String> = []
+    @State private var liveActivityOn: Bool = false
 
     var body: some View {
         NavigationStack {
@@ -69,6 +70,12 @@ struct SettingsView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                }
+                Section("Live Activity") {
+                    Toggle("Show on lock screen / Dynamic Island", isOn: $liveActivityOn)
+                    Text("Off by default. When on, the lock screen and Dynamic Island show a real-time money ticker (sub-second updates) while you're working. The home screen widget always works regardless of this setting.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 Section("Permissions") {
                     HStack {
@@ -136,6 +143,7 @@ struct SettingsView: View {
         rateText = String(format: "%.2f", model.settingsRef.hourlyRate)
         titleText = model.settingsRef.eventTitle
         selected = Set(model.settingsRef.selectedCalendarIDs)
+        liveActivityOn = model.settingsRef.liveActivityEnabled
         refreshCalendars()
     }
 
@@ -164,6 +172,7 @@ struct SettingsView: View {
     private func commit() async {
         let rate = Double(rateText.replacingOccurrences(of: ",", with: ".")) ?? model.settingsRef.hourlyRate
         let title = titleText.trimmingCharacters(in: .whitespacesAndNewlines)
+        model.settingsRef.liveActivityEnabled = liveActivityOn
         await model.updateSettings(
             hourlyRate: rate,
             eventTitle: title.isEmpty ? nil : title
