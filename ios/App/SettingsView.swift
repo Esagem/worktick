@@ -16,6 +16,8 @@ struct SettingsView: View {
     @State private var calendars: [EKCalendar] = []
     @State private var selected: Set<String> = []
     @State private var liveActivityOn: Bool = false
+    @State private var portalURLText: String = ""
+    @State private var leadMinutesText: String = ""
 
     var body: some View {
         NavigationStack {
@@ -69,6 +71,32 @@ struct SettingsView: View {
                              : "Selected \(selected.count) of \(calendars.count) calendars.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                    }
+                }
+                Section("Clock-in / out reminders") {
+                    HStack {
+                        Text("Portal URL")
+                        Spacer()
+                        TextField("https://your-portal.example.com", text: $portalURLText)
+                            .keyboardType(.URL)
+                            .textContentType(.URL)
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                            .multilineTextAlignment(.trailing)
+                    }
+                    HStack {
+                        Text("Lead time (minutes)")
+                        Spacer()
+                        TextField("0", text: $leadMinutesText)
+                            .keyboardType(.numberPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 80)
+                    }
+                    Text("Pings you at every block start and end. Tapping the notification opens the portal URL. Lead time = minutes before the boundary; 0 fires right at the boundary.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Button("Enable notifications") {
+                        Task { _ = await WTClockReminderScheduler.shared.requestAuthorization() }
                     }
                 }
                 Section("Live Activity") {
@@ -144,6 +172,8 @@ struct SettingsView: View {
         titleText = model.settingsRef.eventTitle
         selected = Set(model.settingsRef.selectedCalendarIDs)
         liveActivityOn = model.settingsRef.liveActivityEnabled
+        portalURLText = model.settingsRef.portalURL
+        leadMinutesText = String(model.settingsRef.notifyLeadMinutes)
         refreshCalendars()
     }
 
@@ -173,10 +203,36 @@ struct SettingsView: View {
         let rate = Double(rateText.replacingOccurrences(of: ",", with: ".")) ?? model.settingsRef.hourlyRate
         let title = titleText.trimmingCharacters(in: .whitespacesAndNewlines)
         model.settingsRef.liveActivityEnabled = liveActivityOn
+
+        let trimmedURL = portalURLText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let urlIsValid = trimmedURL.isEmpty ||
+            trimmedURL.lowercased().hasPrefix("http://") ||
+            trimmedURL.lowercased().hasPrefix("https://")
+        if urlIsValid {
+            model.settingsRef.portalURL = trimmedURL
+        }
+        if let lead = Int(leadMinutesText.trimmingCharacters(in: .whitespacesAndNewlines)),
+           lead >= 0, lead <= 120 {
+            model.settingsRef.notifyLeadMinutes = lead
+        }
+
+        // If the user just configured reminders, prompt for permission now so
+        // the next reschedule actually lands notifications on the lock screen.
+        if !trimmedURL.isEmpty || model.settingsRef.notifyLeadMinutes > 0 {
+            _ = await WTClockReminderScheduler.shared.requestAuthorization()
+        }
+
         await model.updateSettings(
             hourlyRate: rate,
             eventTitle: title.isEmpty ? nil : title
         )
         await model.setSelectedCalendars(Array(selected))
+        // model.updateSettings → refresh() already reschedules reminders, but
+        // call once more here in case neither hourlyRate nor eventTitle changed
+        // and refresh short-circuits.
+        await WTClockReminderScheduler.shared.rescheduleAllAsync(
+            schedule: model.schedule,
+            settings: model.settingsRef
+        )
     }
 }

@@ -78,6 +78,10 @@
             android:name=".BlockBoundaryReceiver"
             android:exported="false" />
 
+        <receiver
+            android:name=".ClockReminderReceiver"
+            android:exported="false" />
+
         <service
             android:name=".WidgetTickerService"
             android:foregroundServiceType="dataSync"

@@ -19,11 +19,14 @@ public enum WTSettingsKey {
     public static let lastPollError       = "last_poll_error"
     public static let eventKitAuthorized  = "event_kit_authorized"  // cached
     public static let liveActivityEnabled = "live_activity_enabled" // user opt-in
+    public static let portalURL           = "portal_url"
+    public static let notifyLeadMinutes   = "notify_lead_min"
 }
 
 public enum WTSettingsDefaults {
     public static let hourlyRate: Double = 30.0
     public static let eventTitle: String = "McCrary Summer Work"
+    public static let notifyLeadMinutes: Int = 5
 }
 
 public final class WTSettings {
@@ -115,5 +118,29 @@ public final class WTSettings {
     public var liveActivityEnabled: Bool {
         get { store.bool(forKey: WTSettingsKey.liveActivityEnabled) }
         set { store.set(newValue, forKey: WTSettingsKey.liveActivityEnabled) }
+    }
+
+    // MARK: Portal URL
+
+    /// URL opened when the user taps a clock-in / clock-out reminder
+    /// notification. Empty string disables the link (notification still fires).
+    public var portalURL: String {
+        get { store.string(forKey: WTSettingsKey.portalURL) ?? "" }
+        set {
+            let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            store.set(trimmed, forKey: WTSettingsKey.portalURL)
+        }
+    }
+
+    // MARK: Notify lead time
+
+    /// Minutes before a block start/end to fire a reminder notification.
+    /// 0 = right at the boundary.
+    public var notifyLeadMinutes: Int {
+        get {
+            let raw = store.object(forKey: WTSettingsKey.notifyLeadMinutes) as? Int
+            return max(0, raw ?? WTSettingsDefaults.notifyLeadMinutes)
+        }
+        set { store.set(max(0, newValue), forKey: WTSettingsKey.notifyLeadMinutes) }
     }
 }

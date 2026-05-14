@@ -70,9 +70,11 @@ public final class WTAppModel: ObservableObject {
             self.lastError = nil
             WTLiveActivityController.shared.reconcile(schedule: s)
             scheduler.scheduleAll()
+            await WTClockReminderScheduler.shared.rescheduleAllAsync(schedule: s, settings: settings)
         case .failure(let e):
             self.lastError = e.errorDescription
             self.schedule = store.read()  // fall back to whatever's cached
+            await WTClockReminderScheduler.shared.rescheduleAllAsync(schedule: self.schedule, settings: settings)
         }
     }
 

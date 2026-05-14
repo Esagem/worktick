@@ -13,6 +13,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
+import dev.surge.worktick.ClockReminderScheduler
 import dev.surge.worktick.MoneyTickerWidgetProvider
 import dev.surge.worktick.ScheduleStore
 import dev.surge.worktick.WTSettings
@@ -91,6 +92,7 @@ class SettingsActivity : ComponentActivity() {
                     val active = result.schedule.blocks.any { it.start <= now && now < it.end }
                     if (active) WidgetTickerService.start(this@SettingsActivity)
                     else WidgetTickerService.stop(this@SettingsActivity)
+                    ClockReminderScheduler.scheduleNext(this@SettingsActivity)
                     toast("Refreshed: ${result.schedule.blocks.size} blocks")
                 }
                 is SchedulePoller.Result.Error -> toast("Refresh failed: ${result.message}")

@@ -28,6 +28,7 @@ class ScheduleFetchWorker(
                 MoneyTickerWidgetProvider.requestUpdate(applicationContext)
                 MoneyTickerWidgetProvider.schedulePartialTick(applicationContext, result.schedule)
                 reconcileTickerService(result.schedule)
+                ClockReminderScheduler.scheduleNext(applicationContext)
                 Result.success()
             }
             SchedulePoller.Result.NotAuthenticated -> {

@@ -25,6 +25,7 @@ class WorkTickApp : Application() {
         )
 
         BlockBoundaryScheduler.scheduleNext(this)
+        ClockReminderScheduler.scheduleNext(this)
     }
 }
 

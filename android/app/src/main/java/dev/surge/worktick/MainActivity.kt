@@ -311,6 +311,14 @@ class MainActivity : Activity() {
             "Calendar event title",
             schedule.workEventTitle.ifBlank { "—" }
         ) { editEventTitle(schedule.workEventTitle) })
+        allTimeContent.addView(editableRow(
+            "Portal URL",
+            WTSettings.portalUrl(this).ifBlank { "—" }
+        ) { editPortalUrl(WTSettings.portalUrl(this)) })
+        allTimeContent.addView(editableRow(
+            "Notify lead time",
+            "${WTSettings.notifyLeadMinutes(this)} min"
+        ) { editNotifyLead(WTSettings.notifyLeadMinutes(this)) })
         allTimeContent.addView(infoRow("Planned shift", formatHM(schedule.plannedShiftHours)))
         allTimeContent.addView(infoRow("Total blocks", schedule.blocks.size.toString()))
     }
@@ -676,6 +684,7 @@ class MainActivity : Activity() {
                     is SchedulePoller.Result.Ok -> {
                         ScheduleStore.write(this, pollResult.schedule)
                         MoneyTickerWidgetProvider.requestUpdate(this)
+                        ClockReminderScheduler.scheduleNext(this)
                         syncButton.text = "SYNCED ✓"
                         syncButton.setTextColor(Color.parseColor("#3DFF9A"))
                         handler.postDelayed({ resetSyncButton() }, 1500)
@@ -755,6 +764,73 @@ class MainActivity : Activity() {
         )
     }
 
+    private fun editPortalUrl(current: String) {
+        val input = EditText(this).apply {
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            setText(current)
+            hint = "https://your-portal.example.com"
+            setSelection(text.length)
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.parseColor("#6A6E76"))
+            typeface = monoMedium
+        }
+        showEditDialog(
+            title = "Portal URL",
+            subtitle = "Opened when you tap a clock-in/out notification. " +
+                       "Leave blank to disable the link (notification still fires).",
+            input = input,
+            onSave = {
+                val raw = input.text.toString().trim()
+                if (raw.isNotEmpty() && !raw.startsWith("http://", true) && !raw.startsWith("https://", true)) {
+                    Toast.makeText(this, "URL must start with http:// or https://", Toast.LENGTH_SHORT).show()
+                    return@showEditDialog false
+                }
+                WTSettings.setPortalUrl(this, raw)
+                maybeRequestNotificationPermission()
+                renderEverything()
+                true
+            }
+        )
+    }
+
+    private fun editNotifyLead(current: Int) {
+        val input = EditText(this).apply {
+            inputType = InputType.TYPE_CLASS_NUMBER
+            setText(current.toString())
+            setSelection(text.length)
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.parseColor("#6A6E76"))
+            typeface = monoBold
+        }
+        showEditDialog(
+            title = "Notify lead time (minutes)",
+            subtitle = "How many minutes before a block start/end to ping you. " +
+                       "0 = right at the boundary.",
+            input = input,
+            onSave = {
+                val parsed = input.text.toString().trim().toIntOrNull()
+                if (parsed == null || parsed < 0 || parsed > 120) {
+                    Toast.makeText(this, "Enter a whole number between 0 and 120", Toast.LENGTH_SHORT).show()
+                    return@showEditDialog false
+                }
+                WTSettings.setNotifyLeadMinutes(this, parsed)
+                ClockReminderScheduler.scheduleNext(this)
+                maybeRequestNotificationPermission()
+                renderEverything()
+                true
+            }
+        )
+    }
+
+    private fun maybeRequestNotificationPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        val granted = checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (!granted) {
+            requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 9001)
+        }
+    }
+
     private fun pushConfigUpdate(rate: Double?, title: String?) {
         // Persist to WTSettings synchronously. Rate changes are applied to the
         // cached Schedule immediately so the widget + UI reflect them before the
@@ -784,6 +860,7 @@ class MainActivity : Activity() {
                         is SchedulePoller.Result.Ok -> {
                             ScheduleStore.write(this, pollResult.schedule)
                             MoneyTickerWidgetProvider.requestUpdate(this)
+                            ClockReminderScheduler.scheduleNext(this)
                             syncButton.text = "UPDATED ✓"
                             syncButton.setTextColor(Color.parseColor("#3DFF9A"))
                             handler.postDelayed({ resetSyncButton() }, 1500)

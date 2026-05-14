@@ -149,9 +149,17 @@ class WidgetTickerService : Service() {
     private val tick = object : Runnable {
         override fun run() {
             val schedule = ScheduleStore.read(this@WidgetTickerService)
-            if (schedule == null || !hasActiveBlock(schedule) || !hasWidgetInstance()) {
-                // Block ended, schedule cleared, or widget was removed from the
-                // home screen. Stop the FGS so we're not burning power for nothing.
+            if (!hasWidgetInstance()) {
+                // Widget removed from the home screen — nothing to draw onto.
+                stopSelf()
+                return
+            }
+            if (schedule == null || !hasActiveBlock(schedule)) {
+                // Block just ended or schedule cleared. Render one final frame
+                // so the widget transitions ON CLOCK → OFF DUTY (or SYNC) before
+                // we tear down — otherwise it freezes on the last ON frame until
+                // something else re-renders it.
+                tickWidget()
                 stopSelf()
                 return
             }
@@ -168,7 +176,22 @@ class WidgetTickerService : Service() {
             }
             renderedTicks++
             tickWidget()
-            handler.postDelayed(this, MoneyTickerWidgetProvider.nextCentTickMs(schedule))
+            // Cap the delay so the *boundary* tick lands at block.end — otherwise
+            // the cent-aligned cadence can place the next tick up to ~1s past the
+            // end, leaving a stale ON CLOCK frame visible until then.
+            val centDelay = MoneyTickerWidgetProvider.nextCentTickMs(schedule)
+            val nowMs = System.currentTimeMillis()
+            val nowSec = nowMs / 1000
+            val activeEndSec = schedule.blocks
+                .filter { it.start <= nowSec && nowSec < it.end }
+                .minOfOrNull { it.end }
+            val delay = if (activeEndSec != null) {
+                // +75 ms past the boundary so hasActiveBlock() definitely sees
+                // now >= end on the next tick (clock + handler jitter).
+                val msToEnd = (activeEndSec * 1000L) - nowMs + 75L
+                minOf(centDelay, msToEnd).coerceAtLeast(50L)
+            } else centDelay
+            handler.postDelayed(this, delay)
         }
     }
 

@@ -19,6 +19,12 @@ struct WorkTickApp: App {
     @StateObject private var model = WTAppModel.shared
     @Environment(\.scenePhase) private var scenePhase
 
+    init() {
+        // Install the notification tap delegate before any UI appears so taps
+        // that wake the app from a cold launch are still routed correctly.
+        WTClockReminderScheduler.shared.installDelegate()
+    }
+
     var body: some Scene {
         WindowGroup {
             DashboardView()
