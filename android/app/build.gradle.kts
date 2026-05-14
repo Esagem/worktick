@@ -21,7 +21,7 @@ android {
         applicationId = "dev.surge.worktick"
         minSdk = 26
         targetSdk = 34
-        versionCode = 2
+        versionCode = 3
         versionName = "2.0"
 
         // Inject the Google OAuth client ID + secret at compile time. Both come
